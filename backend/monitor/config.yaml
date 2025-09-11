@@ -1,0 +1,18 @@
+# monitor/config.yaml
+interval_seconds: 10          # how often to check each service
+email:
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  use_tls: true
+  username: "g.s.r.padmanabhan@gmail.com"
+  password: "afrt qjth zdqu oqqg"   # use an App Password, NOT your real password
+  from_email: "g.s.r.padmanabhan@gmail.com"
+  to_emails:
+    - "padhusrp0164@gmail.com"
+
+services:
+  - name: "todo-service"
+    url: "http://localhost:8000/health"
+    failure_threshold: 2     # consecutive failures before DOWN alert
+    recovery_threshold: 1    # consecutive successes before UP alert
+    timeout_seconds: 3

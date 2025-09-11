@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-jose
+passlib
+bcrypt
+motor
+python-dotenv
+python-multipart
+prometheus_client 
+pyyaml 
+requests

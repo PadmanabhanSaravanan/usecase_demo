@@ -1,0 +1,203 @@
+trigger:
+  - master
+
+pool:
+  name: Default
+
+variables:
+  dockerusername: 'padmanabhan1'
+  backendImage: '$(dockerusername)/todo-backend'
+  frontendImage: '$(dockerusername)/todo-frontend'
+  imageTag: '$(Build.SourceVersion)'   # similar to github.sha
+  namespace: 'feature-flags-demo'
+  mongodburl: 'mongodb://mongodb:27017/fastapi_db'
+  secretkey: 'mysecretkey'
+
+stages:
+# ------------------------
+# Build & Push Docker Images
+# ------------------------
+- stage: Build
+  jobs:
+  - job: BuildAndPush
+    steps:
+    - checkout: self
+
+    - task: Docker@2
+      displayName: Docker Login
+      inputs:
+        containerRegistry: 'DockerHubServiceConnection'
+        command: 'login'
+
+    - task: Docker@2
+      displayName: 'Build & Push Backend'
+      inputs:
+        containerRegistry: 'DockerHubServiceConnection'
+        repository: '$(backendImage)'
+        command: 'buildAndPush'
+        Dockerfile: './backend/Dockerfile'
+        tags: '$(imageTag)'
+
+    - task: Docker@2
+      displayName: 'Build & Push Frontend'
+      inputs:
+        containerRegistry: 'DockerHubServiceConnection'
+        repository: '$(frontendImage)'
+        command: 'buildAndPush'
+        Dockerfile: './frontend/Dockerfile'
+        tags: '$(imageTag)'
+
+# stages:
+# - stage: CreateCluster
+#   jobs:
+#     - job: CreateCluster
+#       steps:
+#         - task: AzureCLI@2
+#           displayName: Create Cluster using Azure CLI
+#           inputs:
+#             azureSubscription: 'AzureServiceConnection'
+#             scriptType: 'ps'
+#             scriptLocation: 'inlineScript'
+#             inlineScript: 'az aks create --resource-group rg-azuser4534_mml.local-yQ6aJ --name my-cluster --location canadacentral --node-count 1  --generate-ssh-keys --kubernetes-version 1.30.9'
+#             useGlobalConfig: true
+
+# ------------------------
+# Deploy to AKS
+# ------------------------
+- stage: DeploytoAKS
+  dependsOn: Build
+  jobs:
+    - job: Deploy
+      steps:
+        - checkout: self
+
+        # Create Namespace
+        - task: Kubernetes@1
+          displayName: Create Namespace
+          inputs:
+            connectionType: 'Azure Resource Manager'
+            azureSubscriptionEndpoint: 'AzureServiceConnection'
+            azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+            kubernetesCluster: 'my-cluster'
+            command: 'apply'
+            useConfigurationFile: true
+            configuration: 'k8s/namespace.yaml'
+
+        # Deploy MongoDB
+        - task: Kubernetes@1
+          displayName: Deploy MongoDB
+          inputs:
+            connectionType: 'Azure Resource Manager'
+            azureSubscriptionEndpoint: 'AzureServiceConnection'
+            azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+            kubernetesCluster: 'my-cluster'
+            namespace: 'feature-flags-demo'
+            command: 'apply'
+            useConfigurationFile: true
+            configuration: 'k8s/mongodb.yaml'
+
+        # # Secret for Backend
+        # - task: Kubernetes@1
+        #   displayName: Create Backend Secret
+        #   inputs:
+        #     connectionType: 'Azure Resource Manager'
+        #     azureSubscriptionEndpoint: 'AzureServiceConnection'
+        #     azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+        #     kubernetesCluster: 'my-cluster'
+        #     namespace: 'feature-flags-demo'
+        #     command: 'createSecret'
+        #     secretType: 'generic'
+        #     secretArguments: '--from-literal=SECRET_KEY=$(secretkey) --from-literal=MONGO_URL=$(mongodburl)'
+        #     secretName: 'backend-secrets'
+        #     forceUpdateSecret: true
+
+        # # ConfigMap for Backend
+        # - task: Kubernetes@1
+        #   displayName: Create Backend ConfigMap
+        #   inputs:
+        #     connectionType: 'Azure Resource Manager'
+        #     azureSubscriptionEndpoint: 'AzureServiceConnection'
+        #     azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+        #     kubernetesCluster: 'my-cluster'
+        #     namespace: 'feature-flags-demo'
+        #     command: 'createConfigMap'
+        #     configMapName: 'backend-config'
+        #     forceUpdateConfigMap: true
+        #     useConfigMapFile: true
+        #     configMapFile: 'k8s/backend-configmap.yaml'
+
+        # Deploy Backend
+        - task: Kubernetes@1
+          displayName: Deploy Backend
+          inputs:
+            connectionType: 'Azure Resource Manager'
+            azureSubscriptionEndpoint: 'AzureServiceConnection'
+            azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+            kubernetesCluster: 'my-cluster'
+            namespace: 'feature-flags-demo'
+            command: 'apply'
+            useConfigurationFile: true
+            configuration: 'k8s/backend-deployment.yaml'
+            secretType: 'generic'
+            secretArguments: '--from-literal=SECRET_KEY=$(secretkey) --from-literal=MONGO_URL=$(mongodburl)'
+            secretName: 'backend-secrets'
+            configMapName: 'backend-config'
+            forceUpdateConfigMap: true
+            useConfigMapFile: true
+            configMapFile: 'k8s/backend-configmap.yaml'
+
+        # # ConfigMap for Frontend
+        # - task: Kubernetes@1
+        #   inputs:
+        #     connectionType: 'Azure Resource Manager'
+        #     azureSubscriptionEndpoint: 'AzureServiceConnection'
+        #     azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+        #     kubernetesCluster: 'my-cluster'
+        #     namespace: 'feature-flags-demo'
+        #     command: 'createConfigMap'
+        #     configMapName: 'frontend-config'
+        #     forceUpdateConfigMap: true
+        #     useConfigMapFile: true
+        #     configMapFile: 'k8s/frontend-configmap.yaml'
+
+        # Deploy Frontend
+        - task: Kubernetes@1
+          displayName: Deploy Frontend
+          inputs:
+            connectionType: 'Azure Resource Manager'
+            azureSubscriptionEndpoint: 'AzureServiceConnection'
+            azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+            kubernetesCluster: 'my-cluster'
+            namespace: 'feature-flags-demo'
+            command: 'apply'
+            useConfigurationFile: true
+            configuration: 'k8s/frontend-deployment.yaml'
+            secretType: 'dockerRegistry'
+            containerRegistryType: 'Azure Container Registry'
+            configMapName: 'frontend-config'
+            forceUpdateConfigMap: true
+            useConfigMapFile: true
+            configMapFile: 'k8s/frontend-configmap.yaml'
+
+        # Update Deployments with New Images
+        - task: Kubernetes@1
+          displayName: Update Backend Image
+          inputs:
+            connectionType: 'Azure Resource Manager'
+            azureSubscriptionEndpoint: 'AzureServiceConnection'
+            azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+            kubernetesCluster: 'my-cluster'
+            namespace: 'feature-flags-demo'
+            command: 'set'
+            arguments: 'image deployment/backend backend=$(backendImage):$(imageTag) -n $(namespace)'
+
+        - task: Kubernetes@1
+          displayName: Update Frontend Image
+          inputs:
+            connectionType: 'Azure Resource Manager'
+            azureSubscriptionEndpoint: 'AzureServiceConnection'
+            azureResourceGroup: 'rg-azuser4534_mml.local-yQ6aJ'
+            kubernetesCluster: 'my-cluster'
+            namespace: 'feature-flags-demo'
+            command: 'set'
+            arguments: 'image deployment/frontend frontend=$(frontendImage):$(imageTag) -n $(namespace)'

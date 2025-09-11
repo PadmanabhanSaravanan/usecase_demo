@@ -1,0 +1,42 @@
+name: Rollback Deployment
+description: Rollback to a previous deployment using a specified commit hash.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_hash:
+        description: "Commit hash to rollback to"
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Repo at Specific Commit
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.inputs.commit_hash }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+
+      - name: Configure Kubeconfig
+        shell: powershell
+        run: |
+          if (-Not (Test-Path "$env:USERPROFILE\.kube")) {
+            New-Item -ItemType Directory -Path "$env:USERPROFILE\.kube" | Out-Null
+          }
+          Set-Content -Path "$env:USERPROFILE\.kube\config" -Value "${{ secrets.KUBECONFIG_CONTENT }}"
+
+      - name: Redeploy Backend
+        run: |
+          kubectl set image deployment/backend backend=${{ secrets.DOCKERHUB_USERNAME }}/todo-backend:${{ github.event.inputs.commit_hash }} --namespace feature-flags-demo
+          kubectl rollout status deployment/backend --namespace feature-flags-demo
+
+      - name: Redeploy Frontend
+        run: |
+          kubectl set image deployment/frontend frontend=${{ secrets.DOCKERHUB_USERNAME }}/todo-frontend:${{ github.event.inputs.commit_hash }} --namespace feature-flags-demo
+          kubectl rollout status deployment/frontend --namespace feature-flags-demo
