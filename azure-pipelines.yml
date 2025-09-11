@@ -47,25 +47,25 @@ stages:
         Dockerfile: './frontend/Dockerfile'
         tags: '$(imageTag)'
 
-# stages:
-# - stage: CreateCluster
-#   jobs:
-#     - job: CreateCluster
-#       steps:
-#         - task: AzureCLI@2
-#           displayName: Create Cluster using Azure CLI
-#           inputs:
-#             azureSubscription: 'AzureServiceConnection'
-#             scriptType: 'ps'
-#             scriptLocation: 'inlineScript'
-#             inlineScript: 'az aks create --resource-group rg-azuser4534_mml.local-yQ6aJ --name my-cluster --location canadacentral --node-count 1  --generate-ssh-keys --kubernetes-version 1.30.9'
-#             useGlobalConfig: true
+- stage: CreateCluster
+  dependsOn: Build
+  jobs:
+    - job: CreateCluster
+      steps:
+        - task: AzureCLI@2
+          displayName: Create Cluster using Azure CLI
+          inputs:
+            azureSubscription: 'AzureServiceConnection'
+            scriptType: 'ps'
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az aks create --resource-group rg-azuser4534_mml.local-yQ6aJ --name my-cluster --location canadacentral --node-count 1  --generate-ssh-keys --kubernetes-version 1.30.9'
+            useGlobalConfig: true
 
 # ------------------------
 # Deploy to AKS
 # ------------------------
 - stage: DeploytoAKS
-  dependsOn: Build
+  dependsOn: CreateCluster
   jobs:
     - job: Deploy
       steps:
