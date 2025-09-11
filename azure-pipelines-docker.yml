@@ -1,0 +1,45 @@
+trigger:
+  - none
+
+pool:
+  name: Default
+
+variables:
+  dockerusername: 'padmanabhan1'
+  backendImage: '$(dockerusername)/todo-backend'
+  frontendImage: '$(dockerusername)/todo-frontend'
+  imageTag: 'latest'   # similar to github.sha
+
+stages:
+# ------------------------
+# Build & Push Docker Images
+# ------------------------
+- stage: Build
+  jobs:
+  - job: BuildAndPush
+    steps:
+    - checkout: self
+
+    - task: Docker@2
+      displayName: Docker Login
+      inputs:
+        containerRegistry: 'DockerHubServiceConnection'
+        command: 'login'
+
+    - task: Docker@2
+      displayName: 'Build & Push Backend'
+      inputs:
+        containerRegistry: 'DockerHubServiceConnection'
+        repository: '$(backendImage)'
+        command: 'buildAndPush'
+        Dockerfile: './backend/Dockerfile'
+        tags: '$(imageTag)'
+
+    - task: Docker@2
+      displayName: 'Build & Push Frontend'
+      inputs:
+        containerRegistry: 'DockerHubServiceConnection'
+        repository: '$(frontendImage)'
+        command: 'buildAndPush'
+        Dockerfile: './frontend/Dockerfile'
+        tags: '$(imageTag)'
